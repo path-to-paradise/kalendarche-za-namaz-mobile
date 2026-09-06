@@ -1,4 +1,11 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import React, {
+    forwardRef,
+    useEffect,
+    useImperativeHandle,
+    useMemo,
+    useRef,
+    useState
+} from 'react';
 import { StyleSheet } from 'react-native';
 import PagerView from 'react-native-pager-view';
 
@@ -63,6 +70,17 @@ const TODAY_INDEX = DAYS_BACK;
 export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
     function DayCarousel({ cityTable, onOffsetChange }, ref) {
         const pagerRef = useRef<PagerView>(null);
+        // Forces a brand-new native PagerView instance on every "back to
+        // today" tap, rather than calling setPage() again on the existing
+        // one. On iOS, calling setPage() a second time on a pager that's
+        // already been swiped on has been observed to leave its gesture
+        // recognition broken afterwards (further swipes stop registering,
+        // which is why the button would disappear and never reappear) —
+        // a known category of quirk with UIPageViewController-based
+        // libraries. A fresh native view has no prior state to corrupt,
+        // and the same mount-time correction below (already proven to
+        // work for the very first launch) applies identically to it.
+        const [remountKey, setRemountKey] = useState(0);
 
         useEffect(() => {
             // initialPage is unreliable on iOS for this library's
@@ -73,13 +91,12 @@ export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
                 pagerRef.current?.setPage(TODAY_INDEX);
             });
             // eslint-disable-next-line react-hooks/exhaustive-deps
-        }, []);
+        }, [remountKey]);
 
         useImperativeHandle(ref, () => ({
             goToToday: () => {
-                runAfterLayout(() => {
-                    pagerRef.current?.setPage(TODAY_INDEX);
-                });
+                onOffsetChange?.(0);
+                setRemountKey((key) => key + 1);
             }
         }));
 
@@ -98,6 +115,7 @@ export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
 
         return (
             <PagerView
+                key={remountKey}
                 ref={pagerRef}
                 style={styles.pager}
                 orientation="vertical"
