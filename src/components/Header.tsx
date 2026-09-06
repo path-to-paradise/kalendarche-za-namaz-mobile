@@ -57,7 +57,7 @@ export function Header({
             style={[styles.header, { paddingTop: insets.top + 14 }]}
         >
             <Pressable
-                style={styles.settingsButton}
+                style={[styles.settingsButton, { top: insets.top + 14 }]}
                 onPress={onOpenSettings}
                 hitSlop={10}
             >
@@ -67,7 +67,9 @@ export function Header({
             <Text style={styles.title}>{strings.appTitle}</Text>
 
             <Pressable style={styles.cityButton} onPress={onOpenCityPicker}>
-                <Text style={styles.cityButtonText}>{cityLabel}</Text>
+                <Text style={styles.cityButtonText} numberOfLines={1}>
+                    {cityLabel}
+                </Text>
             </Pressable>
 
             {showTodayButton && (
@@ -90,7 +92,6 @@ const styles = StyleSheet.create({
     },
     settingsButton: {
         position: 'absolute',
-        top: 14,
         right: 16,
         width: 36,
         height: 36,
@@ -106,9 +107,12 @@ const styles = StyleSheet.create({
     },
     cityButton: {
         backgroundColor: 'rgba(255,255,255,0.18)',
-        paddingVertical: 8,
-        paddingHorizontal: 18,
-        borderRadius: 999
+        paddingVertical: 10,
+        paddingHorizontal: 24,
+        borderRadius: 999,
+        minWidth: '65%',
+        maxWidth: '90%',
+        alignItems: 'center'
     },
     cityButtonText: {
         color: '#fff',

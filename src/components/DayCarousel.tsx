@@ -1,10 +1,4 @@
-import React, {
-    forwardRef,
-    useEffect,
-    useImperativeHandle,
-    useRef,
-    useState
-} from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import PagerView from 'react-native-pager-view';
 
@@ -32,25 +26,20 @@ function getPrayerTimesForDate(
 
 // Renders only 3 pages at a time (yesterday/today/tomorrow relative to a
 // moving center offset) instead of one page per day in the whole data
-// range. When the user swipes to an edge page, the window silently
-// re-centers and the pager resets to the middle page without animation —
-// the classic "infinite pager" technique. This keeps memory/render cost
-// constant regardless of how many days of data exist, unlike the web
-// app's original one-page-per-day Swiper instance.
+// range. When the user swipes to an edge page, the window re-centers and
+// the pager needs to land back on the middle page — the classic
+// "infinite pager" technique. That reset is done by remounting the
+// PagerView (via `key={centerOffset}`) rather than calling its
+// setPageWithoutAnimation() imperatively: the imperative call raced with
+// the new children being laid out and could land one page off (e.g. the
+// "back to today" button visibly landing on yesterday). A fresh mount
+// always starts exactly at initialPage, so there's nothing to race.
 export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
     function DayCarousel({ cityTable, onOffsetChange }, ref) {
-        const pagerRef = useRef<PagerView>(null);
         const [centerOffset, setCenterOffset] = useState(0);
-        const isFirstRender = useRef(true);
 
         useEffect(() => {
             onOffsetChange?.(centerOffset);
-
-            if (isFirstRender.current) {
-                isFirstRender.current = false;
-                return;
-            }
-            pagerRef.current?.setPageWithoutAnimation(1);
         }, [centerOffset]);
 
         useImperativeHandle(ref, () => ({
@@ -72,7 +61,7 @@ export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
 
         return (
             <PagerView
-                ref={pagerRef}
+                key={centerOffset}
                 style={styles.pager}
                 orientation="vertical"
                 initialPage={1}
