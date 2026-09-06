@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { StyleSheet } from 'react-native';
 import PagerView from 'react-native-pager-view';
 
@@ -26,44 +26,44 @@ function getPrayerTimesForDate(
 
 // Waits two animation frames instead of one before running a page-jump.
 // A single frame isn't reliably enough time for react-native-pager-view's
-// iOS UIPageViewController wrapper (managing many child view controllers)
-// to finish its own setup before it can accept a page change.
+// iOS UIPageViewController wrapper to finish its own setup before it can
+// accept a page change.
 function runAfterLayout(callback: () => void) {
     requestAnimationFrame(() => requestAnimationFrame(callback));
 }
 
-// Renders a fixed window of WINDOW_RADIUS days on either side of a
-// "window center" offset (15 pages total) instead of one page per day
-// in the whole data range, so memory/render cost stays bounded
-// regardless of how many days of data exist.
+// Earlier versions of this component tried to keep only a small window
+// of pages mounted, rebuilding it (and jumping the pager back to the
+// middle) as the user approached either edge — an "infinite pager"
+// technique. On iOS specifically, changing the PagerView's children at
+// the same time as moving its current page turned out to be too
+// unreliable with this library: the two operations raced or silently
+// failed to apply in combination, in a few different ways depending on
+// exactly when the rebuild happened (wrong page on launch, "today"
+// permanently stuck, swiping hitting an invisible wall mid-session).
 //
-// Getting the pager to land on a specific non-zero page reliably on iOS
-// has been the hard part: initialPage isn't honored, and
-// setPageWithoutAnimation() silently does nothing (the app would launch
-// showing a day WINDOW_RADIUS in the past — i.e. still sitting on
-// native page 0 — rather than today). setPage() (the animated variant)
-// is used instead, since the non-animated one appears to be the
-// specifically broken one on iOS.
-//
-// Just as important: the app's own belief about which day is showing
-// is never updated optimistically before that page change is
-// confirmed. Previously, tapping "today" immediately hid the button
-// (assuming success) even when the page never actually moved, which
-// looked like the button "breaking" — permanently disappearing while
-// the wrong day stayed on screen. Now the offset is only ever updated
-// from a genuine onPageSelected event, so if a page-jump silently
-// fails, the app's state (and the today button) still correctly
-// reflects what's actually on screen instead of lying about it.
-const WINDOW_RADIUS = 7;
+// Instead, a wide but fixed range of days (±WINDOW_RADIUS, rendered
+// once and never rebuilt) is used. Within that range, navigating is
+// just moving the pager's current page — never simultaneously changing
+// what pages exist — which is the one operation this library handles
+// reliably on both platforms. The trade-off is a fixed boundary: swipe
+// more than WINDOW_RADIUS days from where the app opened in a single
+// session and further swiping in that direction stops, rather than
+// extending indefinitely. That's judged an acceptable, rare edge case
+// in exchange for the common cases (launch, ordinary swiping, "back to
+// today") all actually working.
+const WINDOW_RADIUS = 45;
 const PAGE_COUNT = WINDOW_RADIUS * 2 + 1;
-const EDGE_MARGIN = 2;
 
 export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
     function DayCarousel({ cityTable, onOffsetChange }, ref) {
         const pagerRef = useRef<PagerView>(null);
-        const [windowCenter, setWindowCenter] = useState(0);
 
         useEffect(() => {
+            // initialPage is unreliable on iOS for this library's
+            // vertical orientation, so the correct page is set
+            // explicitly right after mount rather than trusted
+            // declaratively.
             runAfterLayout(() => {
                 pagerRef.current?.setPage(WINDOW_RADIUS);
             });
@@ -72,7 +72,6 @@ export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
 
         useImperativeHandle(ref, () => ({
             goToToday: () => {
-                setWindowCenter(0);
                 runAfterLayout(() => {
                     pagerRef.current?.setPage(WINDOW_RADIUS);
                 });
@@ -82,23 +81,13 @@ export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
         const handlePageSelected = (event: {
             nativeEvent: { position: number };
         }) => {
-            const { position } = event.nativeEvent;
-            const newOffset = windowCenter - WINDOW_RADIUS + position;
-            onOffsetChange?.(newOffset);
-
-            const nearStart = position <= EDGE_MARGIN;
-            const nearEnd = position >= PAGE_COUNT - 1 - EDGE_MARGIN;
-            if (nearStart || nearEnd) {
-                setWindowCenter(newOffset);
-                runAfterLayout(() => {
-                    pagerRef.current?.setPage(WINDOW_RADIUS);
-                });
-            }
+            onOffsetChange?.(event.nativeEvent.position - WINDOW_RADIUS);
         };
 
-        const offsets = Array.from(
-            { length: PAGE_COUNT },
-            (_, i) => windowCenter - WINDOW_RADIUS + i
+        // Computed once — this array is never rebuilt after mount.
+        const offsets = useMemo(
+            () => Array.from({ length: PAGE_COUNT }, (_, i) => i - WINDOW_RADIUS),
+            []
         );
 
         return (
