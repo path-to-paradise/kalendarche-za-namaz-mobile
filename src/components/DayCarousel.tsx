@@ -31,12 +31,19 @@ function getPrayerTimesForDate(
     return table[month]?.[day] ?? null;
 }
 
-// Waits two animation frames instead of one before running a page-jump.
-// A single frame isn't reliably enough time for react-native-pager-view's
-// iOS UIPageViewController wrapper to finish its own setup before it can
-// accept a page change.
-function runAfterLayout(callback: () => void) {
-    requestAnimationFrame(() => requestAnimationFrame(callback));
+// A fixed short delay (even two animation frames) isn't reliably enough
+// time for react-native-pager-view's iOS UIPageViewController wrapper to
+// finish its own setup before it can accept a page change — especially
+// with 100+ children. Rather than guess at a delay, retry across a
+// generous window; repeated calls to the same target page are harmless
+// once it's already correct, so this only costs a few no-op calls in
+// the common case where the view was ready early.
+function retrySetPage(pager: React.RefObject<PagerView | null>, page: number) {
+    const delays = [0, 50, 150, 300, 600, 1000];
+    const timeouts = delays.map((delay) =>
+        setTimeout(() => pager.current?.setPage(page), delay)
+    );
+    return () => timeouts.forEach(clearTimeout);
 }
 
 // Days forward is computed relative to today, not a fixed constant, so
@@ -87,9 +94,7 @@ export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
             // vertical orientation, so the correct page is set
             // explicitly right after mount rather than trusted
             // declaratively.
-            runAfterLayout(() => {
-                pagerRef.current?.setPage(TODAY_INDEX);
-            });
+            return retrySetPage(pagerRef, TODAY_INDEX);
             // eslint-disable-next-line react-hooks/exhaustive-deps
         }, [remountKey]);
 
