@@ -1,4 +1,11 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import React, {
+    forwardRef,
+    useCallback,
+    useEffect,
+    useImperativeHandle,
+    useRef,
+    useState
+} from 'react';
 import { StyleSheet } from 'react-native';
 import PagerView from 'react-native-pager-view';
 
@@ -26,34 +33,86 @@ function getPrayerTimesForDate(
 
 // Renders only 3 pages at a time (yesterday/today/tomorrow relative to a
 // moving center offset) instead of one page per day in the whole data
-// range. When the user swipes to an edge page, the window re-centers and
-// the pager needs to land back on the middle page — the classic
-// "infinite pager" technique. That reset is done by remounting the
-// PagerView (via `key={centerOffset}`) rather than calling its
-// setPageWithoutAnimation() imperatively: the imperative call raced with
-// the new children being laid out and could land one page off (e.g. the
-// "back to today" button visibly landing on yesterday). A fresh mount
-// always starts exactly at initialPage, so there's nothing to race.
+// range, so memory/render cost stays constant regardless of how many
+// days of data exist.
+//
+// Whenever the user reaches an edge page (or "today" jumps the window
+// directly), the pager needs to snap back to the middle page. That snap
+// is done imperatively via setPageWithoutAnimation() rather than by
+// remounting the PagerView, because both approaches turned out to race
+// with the native view firing its own extra onPageSelected callback for
+// that programmatic page change — which this code would otherwise
+// misread as a second real user swipe, silently landing one day off
+// (most visibly: "back to today" landing on yesterday). The
+// ignoreNextEventRef below discards exactly one onPageSelected event
+// right after each programmatic recenter, with a short timeout as a
+// safety net in case no such event ever arrives on a given platform —
+// so a real swipe is never permanently swallowed if this guess is wrong.
 export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
     function DayCarousel({ cityTable, onOffsetChange }, ref) {
+        const pagerRef = useRef<PagerView>(null);
         const [centerOffset, setCenterOffset] = useState(0);
+        const ignoreNextEventRef = useRef(false);
+        const ignoreTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+            null
+        );
 
         useEffect(() => {
             onOffsetChange?.(centerOffset);
         }, [centerOffset]);
 
+        useEffect(
+            () => () => {
+                if (ignoreTimeoutRef.current) {
+                    clearTimeout(ignoreTimeoutRef.current);
+                }
+            },
+            []
+        );
+
+        const recenter = useCallback(() => {
+            ignoreNextEventRef.current = true;
+            if (ignoreTimeoutRef.current) {
+                clearTimeout(ignoreTimeoutRef.current);
+            }
+            // Safety net: if the platform never fires a follow-up event
+            // for this programmatic page change, don't block real swipes
+            // forever waiting for one.
+            ignoreTimeoutRef.current = setTimeout(() => {
+                ignoreNextEventRef.current = false;
+            }, 400);
+
+            requestAnimationFrame(() => {
+                pagerRef.current?.setPageWithoutAnimation(1);
+            });
+        }, []);
+
         useImperativeHandle(ref, () => ({
-            goToToday: () => setCenterOffset(0)
+            goToToday: () => {
+                setCenterOffset(0);
+                recenter();
+            }
         }));
 
         const handlePageSelected = (event: {
             nativeEvent: { position: number };
         }) => {
             const { position } = event.nativeEvent;
+
+            if (ignoreNextEventRef.current) {
+                ignoreNextEventRef.current = false;
+                if (ignoreTimeoutRef.current) {
+                    clearTimeout(ignoreTimeoutRef.current);
+                }
+                return;
+            }
+
             if (position === 0) {
                 setCenterOffset((prev) => prev - 1);
+                recenter();
             } else if (position === 2) {
                 setCenterOffset((prev) => prev + 1);
+                recenter();
             }
         };
 
@@ -61,7 +120,7 @@ export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
 
         return (
             <PagerView
-                key={centerOffset}
+                ref={pagerRef}
                 style={styles.pager}
                 orientation="vertical"
                 initialPage={1}
