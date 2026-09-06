@@ -4,7 +4,7 @@ import PagerView from 'react-native-pager-view';
 
 import { DayCard } from './DayCard';
 import type { PrayerTimeTable, DayPrayerTimes } from '../data/timeTable';
-import { getRelativeDate } from '../utils/dateHelpers';
+import { getDaysBetween, getRelativeDate } from '../utils/dateHelpers';
 
 export type DayCarouselHandle = {
     goToToday: () => void;
@@ -32,6 +32,16 @@ function runAfterLayout(callback: () => void) {
     requestAnimationFrame(() => requestAnimationFrame(callback));
 }
 
+// Days forward is computed relative to today, not a fixed constant, so
+// the range always ends exactly on December 31 of the current year
+// regardless of what day the app happens to be opened on.
+function getDaysUntilEndOfYear(): number {
+    const today = getRelativeDate(0);
+    const endOfYear = new Date(today.getFullYear(), 11, 31);
+    endOfYear.setHours(0, 0, 0, 0);
+    return Math.max(getDaysBetween(today, endOfYear), 0);
+}
+
 // Earlier versions of this component tried to keep only a small window
 // of pages mounted, rebuilding it (and jumping the pager back to the
 // middle) as the user approached either edge — an "infinite pager"
@@ -42,18 +52,12 @@ function runAfterLayout(callback: () => void) {
 // exactly when the rebuild happened (wrong page on launch, "today"
 // permanently stuck, swiping hitting an invisible wall mid-session).
 //
-// Instead, a wide but fixed range of days (rendered once and never
-// rebuilt) is used, matching the web app's own range: mostly forward-
-// looking, covering a full rolling year ahead plus a month back for
-// convenience. Within that range, navigating is just moving the
-// pager's current page — never simultaneously changing what pages
-// exist — the one operation this library handles reliably on both
-// platforms. The trade-off is a fixed boundary at the ends of that
-// range instead of unlimited scrolling, accepted since it comfortably
-// covers realistic usage.
-const DAYS_BACK = 30;
-const DAYS_FORWARD = 370;
-const PAGE_COUNT = DAYS_BACK + DAYS_FORWARD + 1;
+// Instead, a fixed range of days (rendered once and never rebuilt) is
+// used: one day back, forward through December 31 of the current year.
+// Within that range, navigating is just moving the pager's current
+// page — never simultaneously changing what pages exist — the one
+// operation this library handles reliably on both platforms.
+const DAYS_BACK = 1;
 const TODAY_INDEX = DAYS_BACK;
 
 export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
@@ -86,10 +90,11 @@ export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
         };
 
         // Computed once — this array is never rebuilt after mount.
-        const offsets = useMemo(
-            () => Array.from({ length: PAGE_COUNT }, (_, i) => i - DAYS_BACK),
-            []
-        );
+        const offsets = useMemo(() => {
+            const daysForward = getDaysUntilEndOfYear();
+            const pageCount = DAYS_BACK + daysForward + 1;
+            return Array.from({ length: pageCount }, (_, i) => i - DAYS_BACK);
+        }, []);
 
         return (
             <PagerView
