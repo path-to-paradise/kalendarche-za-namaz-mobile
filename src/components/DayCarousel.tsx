@@ -41,7 +41,17 @@ function getPrayerTimesForDate(
 function retrySetPage(pager: React.RefObject<PagerView | null>, page: number) {
     const delays = [0, 50, 150, 300, 600, 1000];
     const timeouts = delays.map((delay) =>
-        setTimeout(() => pager.current?.setPage(page), delay)
+        setTimeout(() => {
+            // TEMPORARY diagnostic logging — remove once the iOS
+            // page-landing bug is understood. Check the Metro terminal
+            // output while reproducing the issue.
+            console.log(
+                `[DayCarousel] retrySetPage attempt at ${delay}ms — ` +
+                    `ref is ${pager.current ? 'attached' : 'NULL'}, ` +
+                    `calling setPage(${page})`
+            );
+            pager.current?.setPage(page);
+        }, delay)
     );
     return () => timeouts.forEach(clearTimeout);
 }
@@ -108,6 +118,9 @@ export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
         const handlePageSelected = (event: {
             nativeEvent: { position: number };
         }) => {
+            console.log(
+                `[DayCarousel] onPageSelected fired — position=${event.nativeEvent.position}, TODAY_INDEX=${TODAY_INDEX}`
+            );
             onOffsetChange?.(event.nativeEvent.position - TODAY_INDEX);
         };
 
@@ -115,7 +128,18 @@ export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
         const offsets = useMemo(() => {
             const daysForward = getDaysUntilEndOfYear();
             const pageCount = DAYS_BACK + daysForward + 1;
-            return Array.from({ length: pageCount }, (_, i) => i - DAYS_BACK);
+            const result = Array.from({ length: pageCount }, (_, i) => i - DAYS_BACK);
+            console.log(
+                `[DayCarousel] offsets computed — length=${result.length}, first 3=${result.slice(0, 3)}, TODAY_INDEX=${TODAY_INDEX}`
+            );
+            console.log(
+                `[DayCarousel] dates for index 0/1/2: ` +
+                    result
+                        .slice(0, 3)
+                        .map((o) => getRelativeDate(o).toDateString())
+                        .join(' | ')
+            );
+            return result;
         }, []);
 
         return (
