@@ -78,6 +78,9 @@ export function SettingsModal({ visible, onClose }: Props) {
                                 styles.toggleOptionText,
                                 { color: isActive ? '#fff' : theme.text }
                             ]}
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.75}
                         >
                             {labels[option]}
                         </Text>
