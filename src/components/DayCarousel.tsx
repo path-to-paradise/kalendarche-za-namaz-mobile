@@ -42,18 +42,19 @@ function runAfterLayout(callback: () => void) {
 // exactly when the rebuild happened (wrong page on launch, "today"
 // permanently stuck, swiping hitting an invisible wall mid-session).
 //
-// Instead, a wide but fixed range of days (±WINDOW_RADIUS, rendered
-// once and never rebuilt) is used. Within that range, navigating is
-// just moving the pager's current page — never simultaneously changing
-// what pages exist — which is the one operation this library handles
-// reliably on both platforms. The trade-off is a fixed boundary: swipe
-// more than WINDOW_RADIUS days from where the app opened in a single
-// session and further swiping in that direction stops, rather than
-// extending indefinitely. That's judged an acceptable, rare edge case
-// in exchange for the common cases (launch, ordinary swiping, "back to
-// today") all actually working.
-const WINDOW_RADIUS = 45;
-const PAGE_COUNT = WINDOW_RADIUS * 2 + 1;
+// Instead, a wide but fixed range of days (rendered once and never
+// rebuilt) is used, matching the web app's own range: mostly forward-
+// looking, covering a full rolling year ahead plus a month back for
+// convenience. Within that range, navigating is just moving the
+// pager's current page — never simultaneously changing what pages
+// exist — the one operation this library handles reliably on both
+// platforms. The trade-off is a fixed boundary at the ends of that
+// range instead of unlimited scrolling, accepted since it comfortably
+// covers realistic usage.
+const DAYS_BACK = 30;
+const DAYS_FORWARD = 370;
+const PAGE_COUNT = DAYS_BACK + DAYS_FORWARD + 1;
+const TODAY_INDEX = DAYS_BACK;
 
 export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
     function DayCarousel({ cityTable, onOffsetChange }, ref) {
@@ -65,7 +66,7 @@ export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
             // explicitly right after mount rather than trusted
             // declaratively.
             runAfterLayout(() => {
-                pagerRef.current?.setPage(WINDOW_RADIUS);
+                pagerRef.current?.setPage(TODAY_INDEX);
             });
             // eslint-disable-next-line react-hooks/exhaustive-deps
         }, []);
@@ -73,7 +74,7 @@ export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
         useImperativeHandle(ref, () => ({
             goToToday: () => {
                 runAfterLayout(() => {
-                    pagerRef.current?.setPage(WINDOW_RADIUS);
+                    pagerRef.current?.setPage(TODAY_INDEX);
                 });
             }
         }));
@@ -81,12 +82,12 @@ export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
         const handlePageSelected = (event: {
             nativeEvent: { position: number };
         }) => {
-            onOffsetChange?.(event.nativeEvent.position - WINDOW_RADIUS);
+            onOffsetChange?.(event.nativeEvent.position - TODAY_INDEX);
         };
 
         // Computed once — this array is never rebuilt after mount.
         const offsets = useMemo(
-            () => Array.from({ length: PAGE_COUNT }, (_, i) => i - WINDOW_RADIUS),
+            () => Array.from({ length: PAGE_COUNT }, (_, i) => i - DAYS_BACK),
             []
         );
 
@@ -95,7 +96,7 @@ export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
                 ref={pagerRef}
                 style={styles.pager}
                 orientation="vertical"
-                initialPage={WINDOW_RADIUS}
+                initialPage={TODAY_INDEX}
                 onPageSelected={handlePageSelected}
             >
                 {offsets.map((offset) => {
