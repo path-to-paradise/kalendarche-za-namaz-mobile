@@ -56,6 +56,20 @@ export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
 
         useEffect(() => {
             onOffsetChange?.(windowCenter);
+
+            // initialPage is unreliable on iOS for this library's
+            // vertical orientation (UIPageViewController doesn't handle
+            // initial-page setup as cleanly as Android's ViewPager2, so
+            // the app could visibly launch on the wrong day). Force the
+            // correct page explicitly right after mount instead of
+            // trusting the declarative prop. This is safe to run on
+            // Android too: if the page is already correct, this is a
+            // harmless no-op; if it produces an extra confirmation
+            // event, handlePageSelected recomputes the same offset from
+            // the current window center and does nothing with it.
+            requestAnimationFrame(() => {
+                pagerRef.current?.setPageWithoutAnimation(WINDOW_RADIUS);
+            });
             // Only report the initial offset on mount — subsequent
             // reports happen directly inside handlePageSelected/goToToday.
             // eslint-disable-next-line react-hooks/exhaustive-deps
