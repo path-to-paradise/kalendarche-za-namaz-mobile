@@ -24,27 +24,36 @@ function getPrayerTimesForDate(
     return table[month]?.[day] ?? null;
 }
 
+// Waits two animation frames instead of one before running a page-jump.
+// A single frame isn't reliably enough time for react-native-pager-view's
+// iOS UIPageViewController wrapper (managing many child view controllers)
+// to finish its own setup before it can accept a page change.
+function runAfterLayout(callback: () => void) {
+    requestAnimationFrame(() => requestAnimationFrame(callback));
+}
+
 // Renders a fixed window of WINDOW_RADIUS days on either side of a
 // "window center" offset (15 pages total) instead of one page per day
 // in the whole data range, so memory/render cost stays bounded
 // regardless of how many days of data exist.
 //
-// A minimal 3-page window (recentering on every single swipe) turned
-// out to be too fragile: react-native-pager-view can fire an extra
-// confirmation onPageSelected event after a programmatic page change,
-// and a naive handler misreads that as a second real swipe — landing
-// one day off, or (once guarded with a blunt "ignore the next event"
-// timeout) occasionally swallowing a genuine swipe instead.
+// Getting the pager to land on a specific non-zero page reliably on iOS
+// has been the hard part: initialPage isn't honored, and
+// setPageWithoutAnimation() silently does nothing (the app would launch
+// showing a day WINDOW_RADIUS in the past — i.e. still sitting on
+// native page 0 — rather than today). setPage() (the animated variant)
+// is used instead, since the non-animated one appears to be the
+// specifically broken one on iOS.
 //
-// With a wider window, ordinary browsing — a few days in either
-// direction, or jumping to today from nearby — never touches the
-// recentering logic at all: the pager's own index is read directly
-// off each event and trusted as-is. Recentering only happens near the
-// window's edge, and instead of guessing whether a given event is
-// "real", the reported offset is always recomputed from the CURRENT
-// window center — so an extra confirmation event for a programmatic
-// change lands on the same, already-correct offset and does nothing,
-// rather than being misread as further navigation.
+// Just as important: the app's own belief about which day is showing
+// is never updated optimistically before that page change is
+// confirmed. Previously, tapping "today" immediately hid the button
+// (assuming success) even when the page never actually moved, which
+// looked like the button "breaking" — permanently disappearing while
+// the wrong day stayed on screen. Now the offset is only ever updated
+// from a genuine onPageSelected event, so if a page-jump silently
+// fails, the app's state (and the today button) still correctly
+// reflects what's actually on screen instead of lying about it.
 const WINDOW_RADIUS = 7;
 const PAGE_COUNT = WINDOW_RADIUS * 2 + 1;
 const EDGE_MARGIN = 2;
@@ -55,32 +64,17 @@ export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
         const [windowCenter, setWindowCenter] = useState(0);
 
         useEffect(() => {
-            onOffsetChange?.(windowCenter);
-
-            // initialPage is unreliable on iOS for this library's
-            // vertical orientation (UIPageViewController doesn't handle
-            // initial-page setup as cleanly as Android's ViewPager2, so
-            // the app could visibly launch on the wrong day). Force the
-            // correct page explicitly right after mount instead of
-            // trusting the declarative prop. This is safe to run on
-            // Android too: if the page is already correct, this is a
-            // harmless no-op; if it produces an extra confirmation
-            // event, handlePageSelected recomputes the same offset from
-            // the current window center and does nothing with it.
-            requestAnimationFrame(() => {
-                pagerRef.current?.setPageWithoutAnimation(WINDOW_RADIUS);
+            runAfterLayout(() => {
+                pagerRef.current?.setPage(WINDOW_RADIUS);
             });
-            // Only report the initial offset on mount — subsequent
-            // reports happen directly inside handlePageSelected/goToToday.
             // eslint-disable-next-line react-hooks/exhaustive-deps
         }, []);
 
         useImperativeHandle(ref, () => ({
             goToToday: () => {
                 setWindowCenter(0);
-                onOffsetChange?.(0);
-                requestAnimationFrame(() => {
-                    pagerRef.current?.setPageWithoutAnimation(WINDOW_RADIUS);
+                runAfterLayout(() => {
+                    pagerRef.current?.setPage(WINDOW_RADIUS);
                 });
             }
         }));
@@ -96,8 +90,8 @@ export const DayCarousel = forwardRef<DayCarouselHandle, Props>(
             const nearEnd = position >= PAGE_COUNT - 1 - EDGE_MARGIN;
             if (nearStart || nearEnd) {
                 setWindowCenter(newOffset);
-                requestAnimationFrame(() => {
-                    pagerRef.current?.setPageWithoutAnimation(WINDOW_RADIUS);
+                runAfterLayout(() => {
+                    pagerRef.current?.setPage(WINDOW_RADIUS);
                 });
             }
         };
