@@ -21,7 +21,7 @@ export type Strings = {
     prayerNamesLabel: string;
     styleDefault: string;
     styleArabic: string;
-    styleDescriptive: string;
+    styleForAuthor: string;
     languageLabel: string;
     cityPickerTitle: string;
     todayButton: string;
@@ -60,7 +60,7 @@ export const STRINGS: Record<Language, Strings> = {
         prayerNamesLabel: 'Имена на молитвите',
         styleDefault: 'По подразбиране',
         styleArabic: 'Арабски',
-        styleDescriptive: 'Описателен',
+        styleForAuthor: 'За автора',
         languageLabel: 'Език',
         cityPickerTitle: 'Изберете град',
         todayButton: 'Върни се към днес',
@@ -97,7 +97,7 @@ export const STRINGS: Record<Language, Strings> = {
         prayerNamesLabel: 'Prayer names',
         styleDefault: 'Default',
         styleArabic: 'Arabic',
-        styleDescriptive: 'Descriptive',
+        styleForAuthor: 'For the author',
         languageLabel: 'Language',
         cityPickerTitle: 'Choose a city',
         todayButton: 'Back to today',

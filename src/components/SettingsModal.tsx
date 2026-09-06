@@ -166,13 +166,13 @@ export function SettingsModal({ visible, onClose }: Props) {
                             {strings.prayerNamesLabel}
                         </Text>
                         <ToggleGroup<PrayerNameStyleKey>
-                            options={['default', 'arabic', 'descriptive']}
+                            options={['descriptive', 'arabic', 'default']}
                             value={prayerNameStyle}
                             onChange={setPrayerNameStyle}
                             labels={{
-                                default: strings.styleDefault,
+                                descriptive: strings.styleDefault,
                                 arabic: strings.styleArabic,
-                                descriptive: strings.styleDescriptive
+                                default: strings.styleForAuthor
                             }}
                         />
 

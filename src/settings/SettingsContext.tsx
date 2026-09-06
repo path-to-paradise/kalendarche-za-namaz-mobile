@@ -59,7 +59,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     const [themeMode, setThemeModeState] = useState<ThemeMode>('system');
     const [colorTheme, setColorThemeState] = useState<ColorThemeKey>('green');
     const [prayerNameStyle, setPrayerNameStyleState] =
-        useState<PrayerNameStyleKey>('default');
+        useState<PrayerNameStyleKey>('descriptive');
     const [language, setLanguageState] = useState<Language>('bg');
     const [selectedCity, setSelectedCityState] = useState<string>(DEFAULT_CITY);
 
